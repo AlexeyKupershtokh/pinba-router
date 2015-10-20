@@ -1,4 +1,4 @@
-package PinbaRouter
+package main
 
 import (
 	"flag"

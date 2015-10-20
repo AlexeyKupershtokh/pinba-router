@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/url"
 
 	"github.com/golang/protobuf/proto"
+	client "github.com/influxdb/influxdb/client/v2"
 	"github.com/mkevac/gopinba/Pinba"
 )
 
@@ -31,6 +33,13 @@ func main() {
 
 	defer sock.Close()
 
+	u, _ := url.Parse("http://localhost:8086")
+	c := client.NewClient(client.Config{
+		URL:      u,
+		Username: "username",
+		Password: "password",
+	})
+
 	for {
 		var buf = make([]byte, 65536)
 		rlen, _, err := sock.ReadFromUDP(buf)
@@ -44,5 +53,37 @@ func main() {
 		request := &Pinba.Request{}
 		proto.Unmarshal(buf[0:rlen], request)
 		fmt.Printf("%v", request)
+	}
+}
+
+type Aggregator struct {
+	n      uint32
+	buf    []Pinba.Request
+	input  chan Pinba.Request
+	output chan []Pinba.Request
+}
+
+func NewAggregator(n uint32) *Aggregator {
+	return &Aggregator{n: n}
+}
+
+func run(aggregator *Aggregator) {
+
+	realOutput := aggregator.output
+	var output chan []Pinba.Request
+
+	for {
+		select {
+		case output <- aggregator.buf:
+			aggregator.buf = nil
+			output = nil
+		case request := <-aggregator.input:
+			append(aggregator.buf, request)
+			if len(aggregator.buf) >= aggregator.n {
+				output = realOutput
+			}
+		case <-timer:
+			output = realOutput
+		}
 	}
 }

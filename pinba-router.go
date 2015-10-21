@@ -115,8 +115,8 @@ func (aggregator *Aggregator) run() {
 			if len(aggregator.buf) >= aggregator.n {
 				output = realOutput
 			}
-		case <-timer:
-			output = realOutput
+			// case <-timer:
+			// output = realOutput
 		}
 	}
 }

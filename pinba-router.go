@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/url"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	client "github.com/influxdb/influxdb/client/v2"
@@ -43,7 +44,7 @@ func main() {
 	sinkChan := make(chan Pinba.Request)
 	bpc := client.BatchPointsConfig{}
 	sink := NewInfluxDBSink(100, sinkChan, c, bpc)
-
+	go sink.run()
 	for {
 		var buf = make([]byte, 65536)
 		rlen, _, err := sock.ReadFromUDP(buf)
@@ -64,6 +65,7 @@ func main() {
 type InfluxDBSink struct {
 	bufferLen         uint32
 	input             chan Pinba.Request
+	aggregated        chan []Pinba.Request
 	aggregator        Aggregator
 	client            client.Client
 	BatchPointsConfig client.BatchPointsConfig
@@ -75,12 +77,27 @@ func NewInfluxDBSink(bufferLen uint32, input chan Pinba.Request, client client.C
 	sink := &InfluxDBSink{
 		bufferLen:         bufferLen,
 		input:             input,
+		aggregated:        make(chan []Pinba.Request),
 		aggregator:        *aggregator,
 		client:            client,
 		BatchPointsConfig: batchPointsConfig,
 	}
-	aggregator.run()
 	return sink
+}
+
+func (sink *InfluxDBSink) run() {
+	go sink.aggregator.run()
+	for {
+		select {
+		case batchRequest := <-sink.aggregated:
+			bp, err := client.NewBatchPoints(sink.BatchPointsConfig)
+			for req := range batchRequest {
+				point := client.NewPoint("cpu_usage", nil, nil, time.Now())
+				bp.AddPoint(point)
+			}
+			sink.client.Write(bp)
+		}
+	}
 }
 
 func WriteRequest(request Pinba.Request) error {

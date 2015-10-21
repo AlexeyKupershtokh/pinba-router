@@ -63,7 +63,7 @@ func main() {
 }
 
 type InfluxDBSink struct {
-	bufferLen         uint32
+	bufferLen         int
 	input             chan Pinba.Request
 	aggregated        chan []Pinba.Request
 	aggregator        Aggregator
@@ -71,7 +71,7 @@ type InfluxDBSink struct {
 	BatchPointsConfig client.BatchPointsConfig
 }
 
-func NewInfluxDBSink(bufferLen uint32, input chan Pinba.Request, client client.Client, batchPointsConfig client.BatchPointsConfig) *InfluxDBSink {
+func NewInfluxDBSink(bufferLen int, input chan Pinba.Request, client client.Client, batchPointsConfig client.BatchPointsConfig) *InfluxDBSink {
 	ch := make(chan []Pinba.Request)
 	aggregator := NewAggregator(bufferLen, input, ch)
 	sink := &InfluxDBSink{
@@ -105,13 +105,13 @@ func WriteRequest(request Pinba.Request) error {
 }
 
 type Aggregator struct {
-	n      uint32
+	n      int
 	buf    []Pinba.Request
 	input  chan Pinba.Request
 	output chan []Pinba.Request
 }
 
-func NewAggregator(n uint32, input chan Pinba.Request, output chan []Pinba.Request) *Aggregator {
+func NewAggregator(n int, input chan Pinba.Request, output chan []Pinba.Request) *Aggregator {
 	return &Aggregator{
 		n:      n,
 		input:  input,

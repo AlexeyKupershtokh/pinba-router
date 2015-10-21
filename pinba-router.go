@@ -40,6 +40,10 @@ func main() {
 		Password: "password",
 	})
 
+	sinkChan := make(chan Pinba.Request)
+	bpc := client.BatchPointsConfig{}
+	sink := NewInfluxDBSink(100, sinkChan, c, bpc)
+
 	for {
 		var buf = make([]byte, 65536)
 		rlen, _, err := sock.ReadFromUDP(buf)
@@ -52,8 +56,33 @@ func main() {
 
 		request := &Pinba.Request{}
 		proto.Unmarshal(buf[0:rlen], request)
-		fmt.Printf("%v", request)
+		log.Printf("%v", request)
+		sinkChan <- *request
 	}
+}
+
+type InfluxDBSink struct {
+	bufferLen         uint32
+	input             chan Pinba.Request
+	aggregator        Aggregator
+	client            client.Client
+	BatchPointsConfig client.BatchPointsConfig
+}
+
+func NewInfluxDBSink(bufferLen uint32, input chan Pinba.Request, client client.Client, batchPointsConfig client.BatchPointsConfig) *InfluxDBSink {
+	aggregator := NewAggregator(bufferLen)
+	*aggregator.run()
+	return &InfluxDBSink{
+		bufferLen:         bufferLen,
+		input:             input,
+		aggregator:        *aggregator,
+		client:            client,
+		BatchPointsConfig: batchPointsConfig,
+	}
+}
+
+func WriteRequest(request Pinba.Request) error {
+	return fmt.Errorf("not implemented")
 }
 
 type Aggregator struct {
@@ -64,14 +93,15 @@ type Aggregator struct {
 }
 
 func NewAggregator(n uint32) *Aggregator {
-	return &Aggregator{n: n}
+	return &Aggregator{
+		n:   n,
+		buf: input,
+	}
 }
 
 func run(aggregator *Aggregator) {
-
 	realOutput := aggregator.output
 	var output chan []Pinba.Request
-
 	for {
 		select {
 		case output <- aggregator.buf:

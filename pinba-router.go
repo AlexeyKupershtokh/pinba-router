@@ -42,8 +42,11 @@ func main() {
 	})
 
 	sinkChan := make(chan Pinba.Request)
-	bpc := client.BatchPointsConfig{}
-	sink := NewInfluxDBSink(100, sinkChan, c, bpc)
+	bpc := client.BatchPointsConfig{
+		Precision: "s",
+		Database:  "pinba",
+	}
+	sink := NewInfluxDBSink(10, sinkChan, c, bpc)
 	go sink.run()
 	for {
 		var buf = make([]byte, 65536)
@@ -72,12 +75,13 @@ type InfluxDBSink struct {
 }
 
 func NewInfluxDBSink(bufferLen int, input chan Pinba.Request, client client.Client, batchPointsConfig client.BatchPointsConfig) *InfluxDBSink {
+	log.Printf("Sink create")
 	ch := make(chan []Pinba.Request)
 	aggregator := NewAggregator(bufferLen, input, ch)
 	sink := &InfluxDBSink{
 		bufferLen:         bufferLen,
 		input:             input,
-		aggregated:        make(chan []Pinba.Request),
+		aggregated:        ch,
 		aggregator:        *aggregator,
 		client:            client,
 		BatchPointsConfig: batchPointsConfig,
@@ -86,23 +90,27 @@ func NewInfluxDBSink(bufferLen int, input chan Pinba.Request, client client.Clie
 }
 
 func (sink *InfluxDBSink) run() {
+	log.Printf("Sink run")
 	go sink.aggregator.run()
 	for {
-		select {
-		case batchRequest := <-sink.aggregated:
-			bp, err := client.NewBatchPoints(sink.BatchPointsConfig)
-			if err != nil {
-				log.Fatal(err)
-			}
-			for req := range batchRequest {
-				fields := make(map[string]interface{})
-				log.Print("%v", req)
-				fields["request_time"] = "1"
-				tags := make(map[string]string)
-				point := client.NewPoint("request", tags, fields, time.Now())
-				bp.AddPoint(point)
-			}
-			sink.client.Write(bp)
+		log.Printf("Sink wait for aggregated")
+		batchRequest := <-sink.aggregated
+		log.Printf("Sink got aggregated")
+		bp, err := client.NewBatchPoints(sink.BatchPointsConfig)
+		if err != nil {
+			log.Fatal(err)
+		}
+		for _, req := range batchRequest {
+			fields := make(map[string]interface{})
+			log.Print("%v", req)
+			fields["request_time"] = "1"
+			tags := make(map[string]string)
+			point := client.NewPoint("request", tags, fields, time.Now())
+			bp.AddPoint(point)
+		}
+		err = sink.client.Write(bp)
+		if err != nil {
+			log.Fatal(err)
 		}
 	}
 }
@@ -133,18 +141,22 @@ func (aggregator *Aggregator) run() {
 	for {
 		select {
 		case output <- aggregator.buf:
+			log.Println("case output <- aggregator.buf")
 			timerChannel = nil
 			aggregator.buf = nil
 			output = nil
 		case request := <-aggregator.input:
+			log.Println("case request := <-aggregator.input")
 			if len(aggregator.buf) == 0 {
 				timerChannel = time.After(time.Second)
 			}
 			aggregator.buf = append(aggregator.buf, request)
 			if len(aggregator.buf) >= aggregator.n {
+				log.Printf("len(aggregator.buf) = %v, aggregator.n = %v", len(aggregator.buf), aggregator.n)
 				output = realOutput
 			}
 		case <-timerChannel:
+			log.Println("case <-timerChannel")
 			timerChannel = nil
 			output = realOutput
 		}

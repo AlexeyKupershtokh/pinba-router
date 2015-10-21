@@ -97,8 +97,9 @@ func (sink *InfluxDBSink) run() {
 			for req := range batchRequest {
 				fields := make(map[string]interface{})
 				log.Print("%v", req)
-				fields["request_time"] = 1
-				point := client.NewPoint("request", nil, nil, time.Now())
+				fields["request_time"] = "1"
+				tags := make(map[string]string)
+				point := client.NewPoint("request", tags, fields, time.Now())
 				bp.AddPoint(point)
 			}
 			sink.client.Write(bp)

@@ -127,20 +127,26 @@ func NewAggregator(n int, input chan Pinba.Request, output chan []Pinba.Request)
 }
 
 func (aggregator *Aggregator) run() {
+	timerChannel := make(<-chan time.Time)
 	realOutput := aggregator.output
-	var output chan []Pinba.Request
+	var output chan []Pinba.Request = nil
 	for {
 		select {
 		case output <- aggregator.buf:
+			timerChannel = nil
 			aggregator.buf = nil
 			output = nil
 		case request := <-aggregator.input:
+			if len(aggregator.buf) == 0 {
+				timerChannel = time.After(time.Second)
+			}
 			aggregator.buf = append(aggregator.buf, request)
 			if len(aggregator.buf) >= aggregator.n {
 				output = realOutput
 			}
-			// case <-timer:
-			// output = realOutput
+		case <-timerChannel:
+			timerChannel = nil
+			output = realOutput
 		}
 	}
 }

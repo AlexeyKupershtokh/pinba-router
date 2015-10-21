@@ -92,10 +92,11 @@ type Aggregator struct {
 	output chan []Pinba.Request
 }
 
-func NewAggregator(n uint32) *Aggregator {
+func NewAggregator(n uint32, input chan Pinba.Request, output chan []Pinba.Request) *Aggregator {
 	return &Aggregator{
-		n:   n,
-		buf: input,
+		n:      n,
+		input:  input,
+		output: output,
 	}
 }
 

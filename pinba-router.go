@@ -91,8 +91,14 @@ func (sink *InfluxDBSink) run() {
 		select {
 		case batchRequest := <-sink.aggregated:
 			bp, err := client.NewBatchPoints(sink.BatchPointsConfig)
+			if err != nil {
+				log.Fatal(err)
+			}
 			for req := range batchRequest {
-				point := client.NewPoint("cpu_usage", nil, nil, time.Now())
+				fields := make(map[string]interface{})
+				log.Print("%v", req)
+				fields["request_time"] = 1
+				point := client.NewPoint("request", nil, nil, time.Now())
 				bp.AddPoint(point)
 			}
 			sink.client.Write(bp)
@@ -128,7 +134,7 @@ func (aggregator *Aggregator) run() {
 			aggregator.buf = nil
 			output = nil
 		case request := <-aggregator.input:
-			append(aggregator.buf, request)
+			aggregator.buf = append(aggregator.buf, request)
 			if len(aggregator.buf) >= aggregator.n {
 				output = realOutput
 			}

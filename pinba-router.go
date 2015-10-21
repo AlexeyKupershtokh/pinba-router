@@ -43,10 +43,10 @@ func main() {
 
 	sinkChan := make(chan Pinba.Request)
 	bpc := client.BatchPointsConfig{
-		Precision: "s",
+		Precision: "us",
 		Database:  "pinba",
 	}
-	sink := NewInfluxDBSink(10, sinkChan, c, bpc)
+	sink := NewInfluxDBSink(100, sinkChan, c, bpc)
 	go sink.run()
 	for {
 		var buf = make([]byte, 65536)
@@ -102,9 +102,14 @@ func (sink *InfluxDBSink) run() {
 		}
 		for _, req := range batchRequest {
 			fields := make(map[string]interface{})
-			log.Print("%v", req)
-			fields["request_time"] = "1"
+			log.Printf("%v", req)
+			fields["request_time"] = req.GetRequestTime()
+			fields["ru_utime"] = req.GetRuUtime()
+			fields["ru_stime"] = req.GetRuStime()
 			tags := make(map[string]string)
+			tags["server_name"] = req.GetServerName()
+			tags["hostname"] = req.GetHostname()
+			tags["script_name"] = req.GetScriptName()
 			point := client.NewPoint("request", tags, fields, time.Now())
 			bp.AddPoint(point)
 		}
@@ -137,7 +142,7 @@ func NewAggregator(n int, input chan Pinba.Request, output chan []Pinba.Request)
 func (aggregator *Aggregator) run() {
 	timerChannel := make(<-chan time.Time)
 	realOutput := aggregator.output
-	var output chan []Pinba.Request = nil
+	var output chan []Pinba.Request
 	for {
 		select {
 		case output <- aggregator.buf:
